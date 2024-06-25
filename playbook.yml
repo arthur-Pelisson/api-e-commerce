@@ -1,0 +1,108 @@
+---
+- name: E-commerce book
+  hosts: debian_client
+  become: true
+  vars:
+    symfony_root_dir: /var/www/html/project
+  tasks:
+      - ping: ~
+
+#      - name: Open port 80 for http access
+#        firewalld:
+#          service: http
+#          permanent: true
+#          state: enabled
+#
+#      - name: Restart the firewalld service to load in the firewall changes
+#        service:
+#          name: firewalld
+#          state: restarted
+
+    #Apache Configuration
+      - name: Install LAMP Packages
+        apt: name={{ item }} update_cache=yes state=latest
+        loop: [ 'apache2', 'default-mysql-server', 'python3-pymysql', 'php', 'php-mysql', 'libapache2-mod-php' ]
+
+
+      - name: Install Git VCS
+        become: true
+        apt:
+          name: git
+          state: latest
+
+      - name: Install MySQL DB server
+        become: true
+        apt:
+          name: default-mysql-server
+          state: latest
+    # MySQL Configuration
+      - name: Create database user with name 'bob' and password '12345' with all database privileges
+        community.mysql.mysql_user:
+          name: root
+          password: root
+          priv: '*.*:ALL'
+          state: present
+
+      - name: Add PHP 7 PPA repository
+        script: ansible/scripts/install_php.sh
+    #        become: true
+#        apt_repository:
+#          repo: 'packages.sury.org/php/apt.gpg'
+
+      - name: Install PHP CLI
+        apt:
+          name: php7.2-cli
+
+      - name: Install PHP packages
+        become: true
+        apt:
+          name: "{{ item }}"
+          state: latest
+        with_items:
+          - php7.2-cli
+          - php7.2-curl
+          - php7.2-fpm
+          - php7.2-intl
+          - php7.2-mysql
+          - php7.4-ext-xml
+
+      - name: Create project directory and set its permissions
+        become: true
+        file:
+          path: "{{ symfony_root_dir }}"
+          state: directory
+          owner: "{{ ansible_user }}"
+          group: "{{ ansible_user }}"
+          recurse: yes
+
+      - name: Checkout Git repository
+        become: true
+        git:
+          repo: https://JeremyKhamdy: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@github.com/EpitechIT2020/T-WEB-600-LYN-6-1-ecommerce-jeremy1.khamdy.git
+          dest: "{{ symfony_root_dir }}"
+          force: yes
+
+      - name: Install low-level utilities
+        become: true
+        apt:
+          name: "{{ item }}"
+        with_items:
+          - zip
+          - unzip
+
+      - name: Download Composer
+        script: ansible/scripts/install_composer.sh
+
+      - name: Move Composer globally
+        become: true
+        command: mv composer.phar /usr/local/bin/composer
+
+      - name: Set permissions on Composer
+        become: true
+        file:
+          path: /usr/local/bin/composer
+          mode: "a+x"
+
+      - name: Doctrine migrate
+        become: true
+        command: cd /var/www/html/project/ bin/console doctrine:migrations:migrate
